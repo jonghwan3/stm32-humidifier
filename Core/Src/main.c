@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ssd1306.h"
+#include "sht31d.h"
 #include "fonts.h"
 #include "stdio.h"
 #include "bitmap.h"
@@ -108,7 +109,11 @@ int main(void)
 //  SSD1306_GotoXY(0, 18);
   int set_hum = 65;
   char msg[20] = {0};
-  SSD1306_Puts("Set: 65%", &Font_11x18, 1);
+  char buf[32];
+  float temp, hum;
+
+  uint32_t last_update = 0;
+  SSD1306_Puts("Set: 58%", &Font_11x18, 1);
   SSD1306_GotoXY(0, 22);
   SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
 //  SSD1306_Puts("Tem: 30°C, Hum: 65%", &Font_7x10, 1);
@@ -178,32 +183,79 @@ int main(void)
 //	  i++;
 //	  printf("i = %d\r\n", i);
 //	  HAL_Delay(1000);
-	  if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
-		  set_hum++;
-		  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-		  SSD1306_Clear();
-		  SSD1306_GotoXY(0, 0);
-		  SSD1306_Puts(msg, &Font_11x18, 1);
-		  SSD1306_GotoXY(0, 22);
-		  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
-		  SSD1306_UpdateScreen();
-		  HAL_Delay(100);
-//		  HAL_GPIO_WritePin(GPIO_LED_GPIO_Port, GPIO_LED_Pin, GPIO_PIN_RESET);
+
+	  if (SHT31_ReadTempHum(&temp, &hum) == 0) {
+	          SSD1306_Clear();
+			  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
+	          SSD1306_GotoXY(0, 0);
+	          SSD1306_Puts(msg, &Font_11x18, 1);
+	          snprintf(buf, sizeof(buf), "Cur: %.1f %%", hum);
+			  SSD1306_GotoXY(0, 22);
+	          SSD1306_Puts(buf, &Font_11x18, 1);
+	          SSD1306_UpdateScreen();
+
+	          while (1) {
+	              // check buttons and update display here
+	              if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
+	                  // increment logic
+	            	  set_hum++;
+					  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
+					  SSD1306_Clear();
+					  SSD1306_GotoXY(0, 0);
+					  SSD1306_Puts(msg, &Font_11x18, 1);
+					  SSD1306_GotoXY(0, 22);
+			          snprintf(buf, sizeof(buf), "Cur: %.1f %%", hum);
+					  SSD1306_UpdateScreen();
+					  HAL_Delay(100);
+	              }
+	              if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
+	                  // decrement logic
+	            	  set_hum--;
+					  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
+					  SSD1306_Clear();
+					  SSD1306_GotoXY(0, 0);
+					  SSD1306_Puts(msg, &Font_11x18, 1);
+					  SSD1306_GotoXY(0, 22);
+			          snprintf(buf, sizeof(buf), "Cur: %.1f %%", hum);
+					  SSD1306_UpdateScreen();
+					  HAL_Delay(100);
+	              }
+
+	              // check if 2000ms passed
+	              if (HAL_GetTick() - last_update >= 2000) {
+	                  last_update = HAL_GetTick();
+	                  break;
+	              }
+	          }
 	  }
+
+
+//	  if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
+//		  set_hum++;
+//		  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
+//		  SSD1306_Clear();
+//		  SSD1306_GotoXY(0, 0);
+//		  SSD1306_Puts(msg, &Font_11x18, 1);
+//		  SSD1306_GotoXY(0, 22);
+//		  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
+//		  SSD1306_UpdateScreen();
+//		  HAL_Delay(100);
+//		  HAL_GPIO_WritePin(GPIO_LED_GPIO_Port, GPIO_LED_Pin, GPIO_PIN_RESET);
+//	  }
 //	  } else {
 //		  HAL_GPIO_WritePin(GPIO_LED_GPIO_Port, GPIO_LED_Pin, GPIO_PIN_SET);
 //	  }
-	  if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
-		  set_hum--;
-		  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-		  SSD1306_Clear();
-		  SSD1306_GotoXY(0, 0);
-		  SSD1306_Puts(msg, &Font_11x18, 1);
-		  SSD1306_GotoXY(0, 22);
-		  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
-		  SSD1306_UpdateScreen();
-		  HAL_Delay(100);
-	  }
+//	  if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
+//		  set_hum--;
+//		  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
+//		  SSD1306_Clear();
+//		  SSD1306_GotoXY(0, 0);
+//		  SSD1306_Puts(msg, &Font_11x18, 1);
+//		  SSD1306_GotoXY(0, 22);
+//		  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
+//		  SSD1306_UpdateScreen();
+//		  HAL_Delay(100);
+//	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

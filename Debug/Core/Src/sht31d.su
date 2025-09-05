@@ -1,0 +1,2 @@
+../Core/Src/sht31d.c:12:5:SHT31_ReadTempHum	40	static
+../Core/Src/sht31d.c:36:9:SHT31_CRC8	32	static
