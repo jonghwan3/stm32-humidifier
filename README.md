@@ -1,4 +1,4 @@
-## stm32-humidity-controller (STM32F4)
+## STM32-Humidity-Controller (STM32F4)
 Closed-loop humidifier controller: lets a user set a target RH and automatically toggles the humidifier to keep RH within a ±3% hysteresis band around that target.
 
 ### What it does
