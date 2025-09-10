@@ -1,12 +1,14 @@
-## stm32-humidifier
-Embedded humidity controller: set target humidity, measure current value, and switch humidifier on/off to maintain the target.
+## stm32-humidity-controller (STM32F4)
+Closed-loop humidifier controller: lets a user set a target RH and automatically toggles the humidifier to keep RH within a ±3% hysteresis band around that target.
 
-### Current progress: 
-- Communicate with SSD1306 OLED (128×64, I²C) display.
-- Control target humidity using GPIO switches (pull-up).
-- Communicate with humidity sensor (SHT31-D, I²C)
+### What is does
+- Shows target and live RH on a 128×64 SSD1306 OLED (I²C).
+- Lets the user adjust target RH via pull-up GPIO buttons (debounced).
+- Reads humidity from an SHT31-D sensor over I²C.
+- “Presses” the humidifier’s front-panel button using a 4N25 optocoupler (GPIO-driven), preserving electrical isolation.
 
-https://github.com/user-attachments/assets/571c1f78-68de-4618-a833-c551a57ca8f8
+### Demo
+https://github.com/user-attachments/assets/c23da429-ac59-43c4-85e8-08c5b49aa72a
 
-### Future plans:
-- Add relay switch (SRD-05VDC-SL-C) to control humidifier (on/off)
+### Next steps:
+- Refactor to FreeRTOS: split into tasks (SensorRead, ControlLoop, UI/OLED, Input) with queues/semaphores; add watchdog. 
