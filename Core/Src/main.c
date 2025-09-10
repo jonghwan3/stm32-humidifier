@@ -111,6 +111,8 @@ int main(void)
   char msg[20] = {0};
   char buf[32];
   float temp, hum;
+  float buffer = 3;
+  int hum_flag = 0;
 
   uint32_t last_update = 0;
   SSD1306_Puts("Set: 58%", &Font_11x18, 1);
@@ -137,52 +139,6 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-//	  	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse1,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse2,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse3,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse4,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse5,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse6,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse7,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse8,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse9,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//
-//
-//	 	  SSD1306_Clear();
-//	 	  SSD1306_DrawBitmap(0,0,horse10,128,64,1);
-//	 	  SSD1306_UpdateScreen();
-//	  HAL_UART_Transmit(&huart2, (uint8_t *)msg, strlen(msg), 2000);
-//	  i++;
-//	  printf("i = %d\r\n", i);
-//	  HAL_Delay(1000);
 
 	  if (SHT31_ReadTempHum(&temp, &hum) == 0) {
 	          SSD1306_Clear();
@@ -193,6 +149,17 @@ int main(void)
 			  SSD1306_GotoXY(0, 22);
 	          SSD1306_Puts(buf, &Font_11x18, 1);
 	          SSD1306_UpdateScreen();
+	          if(hum - set_hum > buffer && hum_flag) { //
+	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
+	        	  HAL_Delay(3000);
+	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+	        	  hum_flag = 0;
+	          } else if(set_hum - hum > buffer && !hum_flag) {
+	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
+	        	  HAL_Delay(1000);
+	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+	        	  hum_flag = 1;
+	          }
 
 	          while (1) {
 	              // check buttons and update display here
@@ -228,34 +195,6 @@ int main(void)
 	              }
 	          }
 	  }
-
-
-//	  if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
-//		  set_hum++;
-//		  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-//		  SSD1306_Clear();
-//		  SSD1306_GotoXY(0, 0);
-//		  SSD1306_Puts(msg, &Font_11x18, 1);
-//		  SSD1306_GotoXY(0, 22);
-//		  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
-//		  SSD1306_UpdateScreen();
-//		  HAL_Delay(100);
-//		  HAL_GPIO_WritePin(GPIO_LED_GPIO_Port, GPIO_LED_Pin, GPIO_PIN_RESET);
-//	  }
-//	  } else {
-//		  HAL_GPIO_WritePin(GPIO_LED_GPIO_Port, GPIO_LED_Pin, GPIO_PIN_SET);
-//	  }
-//	  if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
-//		  set_hum--;
-//		  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-//		  SSD1306_Clear();
-//		  SSD1306_GotoXY(0, 0);
-//		  SSD1306_Puts(msg, &Font_11x18, 1);
-//		  SSD1306_GotoXY(0, 22);
-//		  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
-//		  SSD1306_UpdateScreen();
-//		  HAL_Delay(100);
-//	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -391,6 +330,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIO_LED_GPIO_Port, GPIO_LED_Pin, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : GPIO_SW_Pin */
   GPIO_InitStruct.Pin = GPIO_SW_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -409,6 +351,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIO_SW_D_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : GPIO_HUM_Pin */
+  GPIO_InitStruct.Pin = GPIO_HUM_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIO_HUM_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 

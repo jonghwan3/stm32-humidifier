@@ -10,7 +10,8 @@ extern I2C_HandleTypeDef hi2c1;
 #define SHT31D_I2C &hi2c1
 
 int SHT31_ReadTempHum(float *temperature, float *humidity) {
-    uint8_t cmd[2] = {0x24, 0x00};   // high repeatability, no clock stretching
+//    uint8_t cmd[2] = {0x24, 0x00};   // high repeatability, no clock stretching
+	uint8_t cmd[2] = {0x2C, 0x06};   // high repeatability, no clock stretching
     uint8_t data[6];
 
     if (HAL_I2C_Master_Transmit(&hi2c1, SHT31D_I2C_ADDR, cmd, 2, HAL_MAX_DELAY) != HAL_OK)
