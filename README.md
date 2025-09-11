@@ -14,3 +14,6 @@ https://github.com/user-attachments/assets/1070aed7-2c84-4b51-a71c-5aa1089b58ec
 - Optocoupler (4N25): Provides galvanic isolation between the STM32 (3.3 V logic) and the humidifier’s circuit, protecting the MCU from voltage spikes or unknown transients.
 - ±3% hysteresis band: Prevents rapid toggling near the setpoint, reducing actuator stress and ensuring stable humidity control.
 - Pull-up buttons with time-delayed debouncing: Pull-ups prevent floating inputs, while a time-based debounce filter avoids multiple counts from a single press. 
+
+### FreeRTOS:
+- implemented on rtos branch
