@@ -18,6 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "FreeRTOS.h"
+#include "queue.h"
+#include "task.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -61,9 +64,24 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
-/* USER CODE BEGIN PFP */
+void StartDefaultTask(void *argument);
 
-int i = 0;
+
+/* USER CODE BEGIN PFP */
+// ------------ RTOS handles ---------------------
+typedef struct { float temp; float hum; } rh_sample_t;
+static QueueHandle_t xQueueRH;
+
+// ------------ Globals ---------------------
+static volatile int   g_set_hum = 65;
+static volatile int   g_hum_on  = 0;
+static volatile float   last_hum = -1000.0f;
+static const    float   g_hyst    = 3.0f;         // ±3%
+
+// Forward decls
+static void SensorUiTask(void *arg);
+static void ControlTask(void *arg);
+static void InputTask(void *arg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -103,103 +121,129 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-//  char msg[] = "Hello from STM32!\n";
   SSD1306_Init();
-//  SSD1306_Puts("Tem: 30°C", &Font_11x18, 1);
-//  SSD1306_GotoXY(0, 18);
-  int set_hum = 65;
-  char msg[20] = {0};
-  char buf[32];
-  float temp, hum;
-  float buffer = 3;
-  int hum_flag = 0;
-
-  uint32_t last_update = 0;
-  SSD1306_Puts("Set: 58%", &Font_11x18, 1);
-  SSD1306_GotoXY(0, 22);
-  SSD1306_Puts("Cur: 50%", &Font_11x18, 1);
-//  SSD1306_Puts("Tem: 30°C, Hum: 65%", &Font_7x10, 1);
-//  SSD1306_GotoXY(0, 20);
-//  SSD1306_Puts("HUMI:65%", &Font_7x10, 1);
-  SSD1306_UpdateScreen();
-//  HAL_Delay (10000);
-//  SSD1306_DrawBitmap(0, 0, logo, 128, 64, 1);
-//  SSD1306_UpdateScreen(); // update screen
-
-//  SSD1306_ScrollRight(0x00, 0x07);    // scroll entire screen (Page0 to Page7) right
-//  HAL_Delay (5000);
-//  SSD1306_Stopscroll();
-
-//  SSD1306_ScrollLeft(0x00, 0x07);    // scroll entire screen (Page0 to Page7) right
-//  HAL_Delay (5000);
-//  SSD1306_Stopscroll();
   /* USER CODE END 2 */
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of defaultTask */
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  xQueueRH   = xQueueCreate(2, sizeof(rh_sample_t));
+  // Create tasks
+  xTaskCreate(SensorUiTask,  "SensorUI",  768, NULL, 2, NULL);
+  xTaskCreate(ControlTask, "Control", 512, NULL, 3, NULL);
+  xTaskCreate(InputTask,   "Input",   384, NULL, 2, NULL);
+
+  // Start scheduler
+  vTaskStartScheduler();
+
+  /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-
-	  if (SHT31_ReadTempHum(&temp, &hum) == 0) {
-	          SSD1306_Clear();
-			  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-	          SSD1306_GotoXY(0, 0);
-	          SSD1306_Puts(msg, &Font_11x18, 1);
-	          snprintf(buf, sizeof(buf), "Cur: %.1f %%", hum);
-			  SSD1306_GotoXY(0, 22);
-	          SSD1306_Puts(buf, &Font_11x18, 1);
-	          SSD1306_UpdateScreen();
-	          if(hum - set_hum > buffer && hum_flag) { //
-	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
-	        	  HAL_Delay(3000);
-	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
-	        	  hum_flag = 0;
-	          } else if(set_hum - hum > buffer && !hum_flag) {
-	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
-	        	  HAL_Delay(1000);
-	        	  HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
-	        	  hum_flag = 1;
-	          }
-
-	          while (1) {
-	              // check buttons and update display here
-	              if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
-	                  // increment logic
-	            	  set_hum++;
-					  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-					  SSD1306_Clear();
-					  SSD1306_GotoXY(0, 0);
-					  SSD1306_Puts(msg, &Font_11x18, 1);
-					  SSD1306_GotoXY(0, 22);
-			          snprintf(buf, sizeof(buf), "Cur: %.1f %%", hum);
-					  SSD1306_UpdateScreen();
-					  HAL_Delay(100);
-	              }
-	              if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
-	                  // decrement logic
-	            	  set_hum--;
-					  snprintf(msg, sizeof(msg), "Set: %d%%", set_hum);
-					  SSD1306_Clear();
-					  SSD1306_GotoXY(0, 0);
-					  SSD1306_Puts(msg, &Font_11x18, 1);
-					  SSD1306_GotoXY(0, 22);
-			          snprintf(buf, sizeof(buf), "Cur: %.1f %%", hum);
-					  SSD1306_UpdateScreen();
-					  HAL_Delay(100);
-	              }
-
-	              // check if 2000ms passed
-	              if (HAL_GetTick() - last_update >= 2000) {
-	                  last_update = HAL_GetTick();
-	                  break;
-	              }
-	          }
-	  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
+}
+
+// -------------- Tasks ----------------------
+
+static void SensorUiTask(void *arg) {
+	char line[24];
+	rh_sample_t sample;
+	for (;;) {
+		if (SHT31_ReadTempHum(&sample.temp, &sample.hum) == 0) {
+			last_hum = sample.hum;
+			SSD1306_Clear();
+			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
+			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
+
+			snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
+			SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
+			SSD1306_UpdateScreen();
+			xQueueOverwrite(xQueueRH, &sample); // keep the latest
+
+		}
+		vTaskDelay(pdMS_TO_TICKS(1000));
+	}
+}
+
+static void ControlTask(void *arg) {
+	rh_sample_t sample = {0};
+	for (;;) {
+		if (xQueueReceive(xQueueRH, &sample, portMAX_DELAY) == pdPASS) {
+			// Hysteresis controller
+			if (g_hum_on && sample.hum > (g_set_hum + g_hyst)) {
+				HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
+				vTaskDelay(pdMS_TO_TICKS(3000));   // OFF long press
+			    HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+				g_hum_on = 0;
+			} else if (!g_hum_on && sample.hum < (g_set_hum - g_hyst)) {
+				HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
+				vTaskDelay(pdMS_TO_TICKS(1000));   // ON short press
+	        	HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+				g_hum_on = 1;
+			}
+		}
+	}
+}
+
+static void InputTask(void *arg){
+	char line[24];
+	for(;;) {
+		// increment logic (target humidity)
+		if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
+			g_set_hum++;
+			SSD1306_Clear();
+			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
+			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
+	        snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
+	        SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
+	        SSD1306_UpdateScreen();
+			vTaskDelay(pdMS_TO_TICKS(100));
+
+		}
+		// decrease logic (target humidity)
+		if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
+			g_set_hum--;
+			SSD1306_Clear();
+			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
+			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
+	        snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
+	        SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
+	        SSD1306_UpdateScreen();
+			vTaskDelay(pdMS_TO_TICKS(100));
+		}
+		vTaskDelay(pdMS_TO_TICKS(10)); // let other tasks run
+	}
 }
 
 /**
@@ -367,6 +411,24 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartDefaultTask */
+/**
+  * @brief  Function implementing the defaultTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_StartDefaultTask */
+void StartDefaultTask(void *argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+    osDelay(1);
+  }
+  /* USER CODE END 5 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
