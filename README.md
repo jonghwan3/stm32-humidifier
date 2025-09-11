@@ -15,5 +15,5 @@ https://github.com/user-attachments/assets/1070aed7-2c84-4b51-a71c-5aa1089b58ec
 - ±3% hysteresis band: Prevents rapid toggling near the setpoint, reducing actuator stress and ensuring stable humidity control.
 - Pull-up buttons with time-delayed debouncing: Pull-ups prevent floating inputs, while a time-based debounce filter avoids multiple counts from a single press. 
 
-### Next steps:
-- FreeRTOS refactor (tasks, queues, watchdog). 
+### FreeRTOS:
+- FreeRTOS version (tasks, queues, mutexes)
