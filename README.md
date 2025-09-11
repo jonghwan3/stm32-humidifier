@@ -8,7 +8,7 @@ Closed-loop humidifier controller: lets a user set a target RH and automatically
 - Controls the humidifier by simulating a front-panel button press through a 4N25 optocoupler (GPIO-driven), ensuring electrical isolation.
 
 ### Demo
-https://github.com/user-attachments/assets/c23da429-ac59-43c4-85e8-08c5b49aa72a
+https://github.com/user-attachments/assets/1070aed7-2c84-4b51-a71c-5aa1089b58ec
 
 ### Design decisions
 - Optocoupler (4N25): Provides galvanic isolation between the STM32 (3.3 V logic) and the humidifier’s circuit, protecting the MCU from voltage spikes or unknown transients.
