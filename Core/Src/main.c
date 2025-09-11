@@ -18,9 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "FreeRTOS.h"
-#include "queue.h"
-#include "task.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -52,6 +50,37 @@ I2C_HandleTypeDef hi2c1;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for SensorUI */
+osThreadId_t SensorUIHandle;
+const osThreadAttr_t SensorUI_attributes = {
+  .name = "SensorUI",
+  .stack_size = 768 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for Control */
+osThreadId_t ControlHandle;
+const osThreadAttr_t Control_attributes = {
+  .name = "Control",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for Input */
+osThreadId_t InputHandle;
+const osThreadAttr_t Input_attributes = {
+  .name = "Input",
+  .stack_size = 384 * 4,
+  .priority = (osPriority_t) osPriorityNormal1,
+};
+/* Definitions for xQueueRH */
+osMessageQueueId_t xQueueRHHandle;
+const osMessageQueueAttr_t xQueueRH_attributes = {
+  .name = "xQueueRH"
+};
+/* Definitions for i2cMutex */
+osMutexId_t i2cMutexHandle;
+const osMutexAttr_t i2cMutex_attributes = {
+  .name = "i2cMutex"
+};
 /* USER CODE BEGIN PV */
 int _write(int file, char *p, int len){
 	HAL_UART_Transmit(&huart2, (uint8_t *)p, len, 10);
@@ -64,13 +93,13 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
-void StartDefaultTask(void *argument);
-
+void SensorUiTask(void *argument);
+void ControlTask(void *argument);
+void InputTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 // ------------ RTOS handles ---------------------
 typedef struct { float temp; float hum; } rh_sample_t;
-static QueueHandle_t xQueueRH;
 
 // ------------ Globals ---------------------
 static volatile int   g_set_hum = 65;
@@ -78,10 +107,6 @@ static volatile int   g_hum_on  = 0;
 static volatile float   last_hum = -1000.0f;
 static const    float   g_hyst    = 3.0f;         // ±3%
 
-// Forward decls
-static void SensorUiTask(void *arg);
-static void ControlTask(void *arg);
-static void InputTask(void *arg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -124,6 +149,12 @@ int main(void)
   SSD1306_Init();
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();
+  /* Create the mutex(es) */
+  /* creation of i2cMutex */
+  i2cMutexHandle = osMutexNew(&i2cMutex_attributes);
+
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
   /* USER CODE END RTOS_MUTEX */
@@ -136,12 +167,23 @@ int main(void)
   /* start timers, add new ones, ... */
   /* USER CODE END RTOS_TIMERS */
 
+  /* Create the queue(s) */
+  /* creation of xQueueRH */
+  xQueueRHHandle = osMessageQueueNew (1, sizeof(uint32_t), &xQueueRH_attributes);
+
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of defaultTask */
+  /* creation of SensorUI */
+  SensorUIHandle = osThreadNew(SensorUiTask, NULL, &SensorUI_attributes);
+
+  /* creation of Control */
+  ControlHandle = osThreadNew(ControlTask, NULL, &Control_attributes);
+
+  /* creation of Input */
+  InputHandle = osThreadNew(InputTask, NULL, &Input_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -152,14 +194,7 @@ int main(void)
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
-  xQueueRH   = xQueueCreate(2, sizeof(rh_sample_t));
-  // Create tasks
-  xTaskCreate(SensorUiTask,  "SensorUI",  768, NULL, 2, NULL);
-  xTaskCreate(ControlTask, "Control", 512, NULL, 3, NULL);
-  xTaskCreate(InputTask,   "Input",   384, NULL, 2, NULL);
-
-  // Start scheduler
-  vTaskStartScheduler();
+  osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
 
@@ -172,78 +207,6 @@ int main(void)
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
-}
-
-// -------------- Tasks ----------------------
-
-static void SensorUiTask(void *arg) {
-	char line[24];
-	rh_sample_t sample;
-	for (;;) {
-		if (SHT31_ReadTempHum(&sample.temp, &sample.hum) == 0) {
-			last_hum = sample.hum;
-			SSD1306_Clear();
-			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
-			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
-
-			snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
-			SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
-			SSD1306_UpdateScreen();
-			xQueueOverwrite(xQueueRH, &sample); // keep the latest
-
-		}
-		vTaskDelay(pdMS_TO_TICKS(1000));
-	}
-}
-
-static void ControlTask(void *arg) {
-	rh_sample_t sample = {0};
-	for (;;) {
-		if (xQueueReceive(xQueueRH, &sample, portMAX_DELAY) == pdPASS) {
-			// Hysteresis controller
-			if (g_hum_on && sample.hum > (g_set_hum + g_hyst)) {
-				HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
-				vTaskDelay(pdMS_TO_TICKS(3000));   // OFF long press
-			    HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
-				g_hum_on = 0;
-			} else if (!g_hum_on && sample.hum < (g_set_hum - g_hyst)) {
-				HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
-				vTaskDelay(pdMS_TO_TICKS(1000));   // ON short press
-	        	HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
-				g_hum_on = 1;
-			}
-		}
-	}
-}
-
-static void InputTask(void *arg){
-	char line[24];
-	for(;;) {
-		// increment logic (target humidity)
-		if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
-			g_set_hum++;
-			SSD1306_Clear();
-			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
-			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
-	        snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
-	        SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
-	        SSD1306_UpdateScreen();
-			vTaskDelay(pdMS_TO_TICKS(100));
-
-		}
-		// decrease logic (target humidity)
-		if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
-			g_set_hum--;
-			SSD1306_Clear();
-			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
-			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
-	        snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
-	        SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
-	        SSD1306_UpdateScreen();
-			vTaskDelay(pdMS_TO_TICKS(100));
-		}
-		vTaskDelay(pdMS_TO_TICKS(10)); // let other tasks run
-	}
 }
 
 /**
@@ -412,22 +375,141 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+/* USER CODE BEGIN Header_SensorUiTask */
 /**
-  * @brief  Function implementing the defaultTask thread.
+  * @brief  Function implementing the SensorUI thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
+/* USER CODE END Header_SensorUiTask */
+void SensorUiTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
+	char line[24];
+	rh_sample_t sample;
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+	  if(osMutexAcquire(i2cMutexHandle, osWaitForever) == osOK) {
+		  if (SHT31_ReadTempHum(&sample.temp, &sample.hum) == 0) {
+			last_hum = sample.hum;
+			SSD1306_Clear();
+			snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
+			SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
+
+			snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
+			SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
+			SSD1306_UpdateScreen();
+			osMutexRelease(i2cMutexHandle);
+			osMessageQueuePut(xQueueRHHandle, &sample, 0, 0); // keep the latest
+			osDelay(2000);
+		  } else {
+			  osMutexRelease(i2cMutexHandle);
+		  }
+	  }
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_ControlTask */
+/**
+* @brief Function implementing the Control thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_ControlTask */
+void ControlTask(void *argument)
+{
+  /* USER CODE BEGIN ControlTask */
+	rh_sample_t sample;
+  /* Infinite loop */
+  for(;;)
+  {
+	  if (osMessageQueueGet(xQueueRHHandle, &sample, NULL, osWaitForever) == osOK) {
+		// Hysteresis controller
+		if (g_hum_on && sample.hum > (g_set_hum + g_hyst)) {
+			HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
+			osDelay(3000);   // OFF long press
+			HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+			g_hum_on = 0;
+		} else if (!g_hum_on && sample.hum < (g_set_hum - g_hyst)) {
+			HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_SET);
+			osDelay(1000);   // ON short press
+			HAL_GPIO_WritePin(GPIO_HUM_GPIO_Port, GPIO_HUM_Pin, GPIO_PIN_RESET);
+			g_hum_on = 1;
+		}
+	}
+  }
+  /* USER CODE END ControlTask */
+}
+
+/* USER CODE BEGIN Header_InputTask */
+/**
+* @brief Function implementing the Input thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_InputTask */
+void InputTask(void *argument)
+{
+  /* USER CODE BEGIN InputTask */
+	char line[24];
+  /* Infinite loop */
+  for(;;)
+  {
+		// increment logic (target humidity)
+		if (!HAL_GPIO_ReadPin(GPIO_SW_GPIO_Port, GPIO_SW_Pin)) {
+			if(osMutexAcquire(i2cMutexHandle, osWaitForever) == osOK) {
+				g_set_hum++;
+				SSD1306_Clear();
+				snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
+				SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
+				snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
+				SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
+				SSD1306_UpdateScreen();
+				osMutexRelease(i2cMutexHandle);
+				osDelay(100);
+			}
+		}
+		// decrease logic (target humidity)
+		if (!HAL_GPIO_ReadPin(GPIO_SW_D_GPIO_Port, GPIO_SW_D_Pin)) {
+			if(osMutexAcquire(i2cMutexHandle, osWaitForever) == osOK) {
+				g_set_hum--;
+				SSD1306_Clear();
+				snprintf(line, sizeof(line), "Set: %d%%", g_set_hum);
+				SSD1306_GotoXY(0, 0);  SSD1306_Puts(line, &Font_11x18, 1);
+				snprintf(line, sizeof(line), "Cur: %.1f%%", last_hum);
+				SSD1306_GotoXY(0, 22); SSD1306_Puts(line, &Font_11x18, 1);
+				SSD1306_UpdateScreen();
+				osMutexRelease(i2cMutexHandle);
+				osDelay(100);
+			}
+		}
+		osDelay(100); // let other tasks run
+  }
+  /* USER CODE END InputTask */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM1 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM1)
+  {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
 }
 
 /**
