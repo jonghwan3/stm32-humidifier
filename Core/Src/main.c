@@ -169,7 +169,7 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of xQueueRH */
-  xQueueRHHandle = osMessageQueueNew (1, sizeof(uint32_t), &xQueueRH_attributes);
+  xQueueRHHandle = osMessageQueueNew (2, sizeof(rh_sample_t), &xQueueRH_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */

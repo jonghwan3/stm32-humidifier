@@ -1309,10 +1309,10 @@ int main(void)
 
   /* Create the queue(s) */
   /* creation of xQueueRH */
-  xQueueRHHandle = osMessageQueueNew (1, sizeof(uint32_t), &xQueueRH_attributes);
+  xQueueRHHandle = osMessageQueueNew (2, sizeof(rh_sample_t), &xQueueRH_attributes);
  8000f68:	4a13      	ldr	r2, [pc, #76]	@ (8000fb8 <main+0x7c>)
- 8000f6a:	2104      	movs	r1, #4
- 8000f6c:	2001      	movs	r0, #1
+ 8000f6a:	2108      	movs	r1, #8
+ 8000f6c:	2002      	movs	r0, #2
  8000f6e:	f004 fb9a 	bl	80056a6 <osMessageQueueNew>
  8000f72:	4603      	mov	r3, r0
  8000f74:	4a11      	ldr	r2, [pc, #68]	@ (8000fbc <main+0x80>)
