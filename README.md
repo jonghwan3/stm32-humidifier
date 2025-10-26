@@ -10,6 +10,9 @@ Closed-loop humidifier controller: lets a user set a target RH and automatically
 ### Demo
 https://github.com/user-attachments/assets/174c4740-8fa4-4cd2-85a1-39e869e5649e
 
+### PCB design
+<img width="523" height="519" alt="image" src="https://github.com/user-attachments/assets/25b606c9-499e-4d84-9e32-0105b460837a" />
+
 ### Design decisions
 - Optocoupler (4N25): Provides galvanic isolation between the STM32 (3.3 V logic) and the humidifier’s circuit, protecting the MCU from voltage spikes or unknown transients.
 - ±3% hysteresis band: Prevents rapid toggling near the setpoint, reducing actuator stress and ensuring stable humidity control.
